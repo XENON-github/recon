@@ -260,20 +260,6 @@ PORT        STATE   SERVICE        VERSION / BANNER DETAILS
 ================================================================================
 Found 4 open port(s).
 
------------------------------------------------------
-  OPERATING SYSTEM DETECTION REPORT
------------------------------------------------------
-Target IP:      192.168.1.10
-OS Detected:    Ubuntu Linux (Jammy Jellyfish / 22.04 LTS)
-OS Family:      Linux
-Confidence:     95%
-Observed TTL:   64 (Estimated Hops: 0)
-
-Detection Evidence:
-  * OpenSSH banner indicates Ubuntu Linux (Ubuntu 3ubuntu0.6)
-  * TCP initial TTL 64 strongly indicates Linux/Unix kernel
-  * HTTP Server header indicates Ubuntu Linux (nginx 1.18.0)
------------------------------------------------------
 ```
 
 <!-- HOW IT WORKS -->
