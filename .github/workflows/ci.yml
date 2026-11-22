@@ -1,0 +1,126 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: ${{ matrix.cc }} / C++${{ matrix.std }} / openssl=${{ matrix.openssl }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { cc: gcc-13,   cxx: g++-13,     std: 17, openssl: AUTO }
+          - { cc: gcc-13,   cxx: g++-13,     std: 20, openssl: AUTO }
+          - { cc: clang-18, cxx: clang++-18, std: 17, openssl: AUTO }
+          - { cc: clang-18, cxx: clang++-18, std: 20, openssl: AUTO }
+          - { cc: gcc-13,   cxx: g++-13,     std: 20, openssl: "OFF" }   # dependency-free build path
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build libssl-dev openssl python3 \
+            ${{ startsWith(matrix.cc, 'clang') && 'clang-18' || 'g++-13' }}
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
+          -DRECON_CXX_STANDARD=${{ matrix.std }} -DRECON_WITH_OPENSSL=${{ matrix.openssl }}
+          -DRECON_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - name: Privileged tests (SYN scanner needs CAP_NET_RAW; unprivileged run above reports SKIP)
+        run: sudo ctest --test-dir build -R '^(syn|cli_e2e)$' --output-on-failure
+
+  sanitizers:
+    name: sanitizer / ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: "asan+ubsan (gcc)",   cc: gcc-13,   cxx: g++-13,     san: "address;undefined" }
+          - { name: "asan+ubsan (clang)", cc: clang-18, cxx: clang++-18, san: "address;undefined" }
+          - { name: "tsan (gcc)",         cc: gcc-13,   cxx: g++-13,     san: "thread" }
+          - { name: "tsan (clang)",       cc: clang-18, cxx: clang++-18, san: "thread" }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build libssl-dev openssl python3 \
+            ${{ startsWith(matrix.cc, 'clang') && 'clang-18' || 'g++-13' }}
+      - name: Work around TSan/ASLR incompatibility on recent runner kernels
+        run: sudo sysctl vm.mmap_rnd_bits=28
+      - name: Configure (Debug + sanitizer)
+        run: >
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
+          -DRECON_CXX_STANDARD=20 "-DRECON_SANITIZER=${{ matrix.san }}"
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        env:
+          ASAN_OPTIONS: detect_leaks=1:strict_string_checks=1
+          UBSAN_OPTIONS: print_stacktrace=1
+          TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
+        run: ctest --test-dir build --output-on-failure -E cli_e2e   # e2e spawns the binary many times; covered above
+
+  fuzz:
+    name: libFuzzer (${{ matrix.target }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [matchers, json, inputs]
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang-18 cmake ninja-build
+      - name: Build fuzz targets
+        run: >
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_CXX_COMPILER=clang++-18
+          -DRECON_BUILD_FUZZERS=ON -DRECON_BUILD_TESTS=OFF -DRECON_WITH_OPENSSL=OFF &&
+          cmake --build build --target fuzz_${{ matrix.target }}
+      - name: Fuzz for 90 s (corpus replay + mutation)
+        run: |
+          mkdir -p work && cp -r fuzz/corpus/${{ matrix.target }}/. work/
+          ./build/fuzz_${{ matrix.target }} work -max_total_time=90 -print_final_stats=1
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: fuzz-crash-${{ matrix.target }}
+          path: crash-*
+
+  format:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang-format-18 cmake
+      - run: cmake -S . -B build -DRECON_BUILD_TESTS=ON -DRECON_WITH_OPENSSL=OFF
+      - name: Check formatting
+        run: cmake --build build --target check-format
+
+  clang-tidy:
+    runs-on: ubuntu-24.04
+    # Report-only until the baseline is clean on this toolchain; then remove continue-on-error
+    # and set WarningsAsErrors in .clang-tidy.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang-18 clang-tidy-18 cmake ninja-build libssl-dev
+      - run: cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++-18 -DRECON_BUILD_TESTS=OFF
+      - run: cmake --build build --target tidy
