@@ -1,0 +1,45 @@
+name: Release
+
+# Push a tag like v2.1.0 to build, test, checksum, attest and publish a release.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-22.04   # older glibc => the binary runs on more distributions
+    permissions:
+      contents: write        # create the release
+      id-token: write        # build provenance attestation
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake ninja-build libssl-dev python3
+      - name: Check the tag matches the project version
+        run: |
+          ver=$(sed -n 's/^project(recon VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          test "v$ver" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME does not match CMake version v$ver"; exit 1; }
+      - name: Build and test
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DRECON_WARNINGS_AS_ERRORS=ON
+          cmake --build build
+          ctest --test-dir build --output-on-failure
+          sudo ctest --test-dir build -R '^(syn|cli_e2e)$' --output-on-failure
+      - name: Package
+        run: |
+          cd build && cpack -G TGZ && cpack -G DEB
+          sha256sum recon-*.tar.gz *.deb > SHA256SUMS
+          cat SHA256SUMS
+      - uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: |
+            build/recon-*.tar.gz
+            build/*.deb
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" build/recon-*.tar.gz build/*.deb build/SHA256SUMS --generate-notes --verify-tag
