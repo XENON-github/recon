@@ -34,7 +34,7 @@ jobs:
           cd build && cpack -G TGZ && cpack -G DEB
           sha256sum recon-*.tar.gz *.deb > SHA256SUMS
           cat SHA256SUMS
-      - uses: actions/attest-build-provenance@v1
+      - uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             build/recon-*.tar.gz
