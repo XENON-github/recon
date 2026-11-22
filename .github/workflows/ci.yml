@@ -27,7 +27,7 @@ jobs:
           - { cc: clang-18, cxx: clang++-18, std: 20, openssl: AUTO }
           - { cc: gcc-13,   cxx: g++-13,     std: 20, openssl: "OFF" }   # dependency-free build path
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -58,7 +58,7 @@ jobs:
           - { name: "tsan (gcc)",         cc: gcc-13,   cxx: g++-13,     san: "thread" }
           - { name: "tsan (clang)",       cc: clang-18, cxx: clang++-18, san: "thread" }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -88,7 +88,7 @@ jobs:
       matrix:
         target: [matchers, json, inputs]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang-18 cmake ninja-build
       - name: Build fuzz targets
         run: >
@@ -108,7 +108,7 @@ jobs:
   format:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang-format-18 cmake
       - run: cmake -S . -B build -DRECON_BUILD_TESTS=ON -DRECON_WITH_OPENSSL=OFF
       - name: Check formatting
@@ -120,7 +120,7 @@ jobs:
     # and set WarningsAsErrors in .clang-tidy.
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang-18 clang-tidy-18 cmake ninja-build libssl-dev
       - run: cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++-18 -DRECON_BUILD_TESTS=OFF
       - run: cmake --build build --target tidy
