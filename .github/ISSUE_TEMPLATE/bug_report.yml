@@ -1,0 +1,26 @@
+name: Bug report
+description: Something is wrong or misleading in recon's behaviour or output
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "**Security problems: do not file them here.** See SECURITY.md. Please also remove any sensitive hostnames or addresses from logs."
+  - type: input
+    id: version
+    attributes: { label: "recon --version", placeholder: "recon 2.1.0" }
+    validations: { required: true }
+  - type: textarea
+    id: env
+    attributes: { label: "Environment", description: "Distro, kernel, compiler, built with or without OpenSSL, CMake or install.sh" }
+    validations: { required: true }
+  - type: textarea
+    id: cmd
+    attributes: { label: "Command line", render: shell }
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes: { label: "What you expected, and what happened", description: "For wrong identifications, include `nc host port` output or the raw banner if you can." }
+    validations: { required: true }
+  - type: textarea
+    id: output
+    attributes: { label: "Output (use --json for detection issues)", render: json }
