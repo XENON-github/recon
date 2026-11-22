@@ -16,7 +16,7 @@ jobs:
       id-token: write        # build provenance attestation
       attestations: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake ninja-build libssl-dev python3
       - name: Check the tag matches the project version
