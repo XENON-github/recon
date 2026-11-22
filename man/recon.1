@@ -1,0 +1,203 @@
+.TH RECON 1 "" "recon 2.1.0" "User Commands"
+.SH NAME
+recon \- TCP/UDP port, service and OS scanner
+.SH SYNOPSIS
+.B recon
+.I target
+.RI [ target ...]
+.RI [ options ]
+.SH DESCRIPTION
+.B recon
+finds reachable TCP and UDP ports on hosts you are responsible for, identifies the services behind them with an explicit confidence score, and can compare the result with an earlier report to detect changes.
+.PP
+.B Only scan systems you own or have explicit written permission to test.
+.PP
+Service versions are reported as parsed from the service\(aqs own response and are marked "reported"; guesses made from port numbers are marked "inferred" and never carry a version.
+.SH OPTIONS
+.SS TARGETS
+.TP
+.B <target>...
+IPv4/IPv6 address, hostname, CIDR block or alias (localhost, me). Several may be given.
+.TP
+.B \-t, \-\-target <t>
+Add a target explicitly (repeatable).
+.TP
+.B \-iL, \-\-input\-list <file>
+Read targets from a file, one per line; # starts a comment; \- reads standard input.
+.TP
+.B \-4, \-6
+Resolve hostnames to IPv4 only / IPv6 only.
+.TP
+.B \-\-max\-hosts <n>
+Maximum targets after CIDR expansion (1\-1048576, default 1024).
+.SS PORTS
+.TP
+.B \-p, \-\-ports <list>
+TCP ports and ranges, e.g. 22,80,8000\-8100. Strictly parsed; 1\-65535.
+.TP
+.B \-pCT
+The 68 common TCP ports.
+.TP
+.B \-pAT
+All 65535 TCP ports.
+.TP
+.B \-pCU
+The 13 common UDP ports.
+.TP
+.B \-pAU
+All 65535 UDP ports (slow, imprecise).
+.SS SCAN TYPE
+.TP
+.B \-sT, \-\-connect
+Full TCP connect scan (default, no privileges).
+.TP
+.B \-sS, \-\-syn
+Half\-open SYN scan using raw sockets. IPv4 only; needs root or CAP_NET_RAW.
+.SS DETECTION
+.TP
+.B \-sV, \-\-service\-version
+Service and version detection (default).
+.TP
+.B \-\-no\-sV
+Disable service detection.
+.TP
+.B \-\-intensity <0\-9>
+Probe aggressiveness (default 5; 0 sends no application data).
+.TP
+.B \-\-no\-tls\-inspect
+Do not complete TLS handshakes to read certificates.
+.TP
+.B \-O, \-os, \-\-os
+Heuristic OS inference. Alone, performs OS inference without scanning ports.
+.TP
+.B \-A, \-\-all
+Shorthand for \-pCT, service detection and \-O.
+.SS PROFILES
+.TP
+.B \-\-profile <name>
+quick, standard, full or stealth. Sets defaults; explicit options always override.
+.SS TIMING AND SAFETY
+.TP
+.B \-\-rate <n>
+New probes per second (default 500; 0 = unlimited).
+.TP
+.B \-\-max\-inflight <n>
+Concurrent scan sockets (default 128).
+.TP
+.B \-\-workers <n>
+Service\-detection threads (default 16).
+.TP
+.B \-\-timeout <ms>
+Connect/SYN timeout (default 1500).
+.TP
+.B \-\-probe\-timeout <ms>
+Cap on service\-detection waits per probe (default 1500).
+.TP
+.B \-\-banner\-wait <ms>
+How long to listen for a greeting before sending probes (default: automatic, at most 400 ms). Raise it for servers that greet slowly.
+.TP
+.B \-\-no\-adaptive
+Disable RTT\-adaptive detection timeouts.
+.TP
+.B \-\-retries <n>
+Extra attempts after a timeout (default 1).
+.SS OUTPUT
+.TP
+.B \-\-json, \-\-csv
+Machine\-readable output (default: table).
+.TP
+.B \-o, \-\-output <file>
+Write the report to a file instead of standard output.
+.TP
+.B \-\-show\-open\-filtered
+Also list UDP open|filtered ports.
+.TP
+.B \-q, \-\-quiet
+Suppress notices and the progress line on standard error.
+.TP
+.B \-\-fail\-on\-open
+Exit 1 if any open port is found.
+.TP
+.B \-\-baseline <file.json>
+Compare with a previous \-\-json report; exit 5 if new ports opened.
+.TP
+.B \-\-color auto|always|never
+Table colours; auto honours NO_COLOR and requires a terminal.
+.TP
+.B \-\-progress, \-\-no\-progress
+Force or disable the live progress line.
+.TP
+.B \-\-dry\-run
+Print what would be scanned (hosts, probe count, estimate) and send nothing.
+.TP
+.B \-h, \-\-help
+Print built\-in help.
+.TP
+.B \-\-version
+Print the version.
+.SH OUTPUT
+The report is written to standard output (or to the file given with \fB\-o\fR); notices, progress and errors go to standard error. The JSON format is versioned (\fBschema_version\fR 1) and always valid UTF\-8.
+.SH EXIT STATUS
+.TP
+.B 0
+Scan completed.
+.TP
+.B 1
+Open ports found (only with \fB\-\-fail\-on\-open\fR).
+.TP
+.B 2
+Usage error.
+.TP
+.B 3
+Targets could not be resolved or expanded.
+.TP
+.B 4
+Runtime or I/O error, or no permission for \fB\-sS\fR.
+.TP
+.B 5
+New open ports compared with \fB\-\-baseline\fR.
+.TP
+.B 130
+Interrupted; partial results are still written.
+.PP
+When several apply, the first of 130, 4, 5, 1 wins.
+.SH ENVIRONMENT
+.TP
+.B NO_COLOR
+Disables automatic colour output.
+.SH EXAMPLES
+Scan common ports of a host:
+.PP
+.RS
+.nf
+recon app.example.lan \-pCT
+.fi
+.RE
+.PP
+Preview a scan without sending anything:
+.PP
+.RS
+.nf
+recon 10.0.0.0/24 \-pCT \-\-dry\-run
+.fi
+.RE
+.PP
+Detect new open ports in CI:
+.PP
+.RS
+.nf
+recon app.example.lan \-pCT \-\-json \-q \-o today.json \-\-baseline baseline.json
+.fi
+.RE
+.PP
+SYN scan of all ports (needs privilege):
+.PP
+.RS
+.nf
+sudo recon app.example.lan \-sS \-pAT \-\-no\-sV
+.fi
+.RE
+.SH FILES
+recon reads and writes only the files named on its command line; it keeps no configuration or state.
+.SH SEE ALSO
+The full manual installed as \fIMANUAL.md\fR (docs/MANUAL.md in the source tree), and \fInmap\fR(1).

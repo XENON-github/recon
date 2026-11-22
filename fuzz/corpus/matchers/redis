@@ -1,0 +1,4 @@
+$60
+# Server
+redis_version:7.0.11
+os:Linux 5.15

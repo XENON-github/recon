@@ -1,0 +1,1 @@
+{"schema_version":1,"hosts":[{"address":"1.2.3.4","ports":[{"port":22,"protocol":"tcp","state":"open","service":{"name":"ssh"}}]}],"summary":{"open":1}}

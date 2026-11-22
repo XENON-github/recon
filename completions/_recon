@@ -1,0 +1,12 @@
+#compdef recon
+_arguments -s \
+  '-pCT[common TCP ports]' '-pAT[all TCP ports]' '-pCU[common UDP ports]' '-pAU[all UDP ports]' \
+  '-p[port list]:ports:' '-sT[connect scan]' '-sS[SYN scan (needs root)]' '--no-sV[disable service detection]' \
+  '-O[OS inference]' '-A[common ports + services + OS]' '-4[IPv4 only]' '-6[IPv6 only]' \
+  '-iL[target file]:file:_files' '--profile[scan profile]:profile:(quick standard full stealth)' \
+  '--intensity[probe intensity 0-9]:level:' '--rate[probes per second]:rate:' '--max-inflight[concurrent sockets]:n:' \
+  '--timeout[connect timeout ms]:ms:' '--probe-timeout[detection wait cap ms]:ms:' '--banner-wait[greeting wait ms]:ms:' '--retries[retries]:n:' \
+  '--json[JSON output]' '--csv[CSV output]' '-o[output file]:file:_files' '--fail-on-open[exit 1 if open ports]' '--dry-run[preview, send nothing]' \
+  '--baseline[compare with previous JSON]:file:_files' '--color[colour]:mode:(auto always never)' \
+  '--progress[force progress line]' '--no-progress[no progress line]' '-q[quiet]' '--version[version]' '-h[help]' \
+  '*:target:'
