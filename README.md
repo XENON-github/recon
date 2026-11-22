@@ -1,18 +1,24 @@
 # Recon
 
-[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/OWNER/REPO/actions/workflows/codeql.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/codeql.yml)
+[![CI](https://github.com/XENON-github/recon/actions/workflows/ci.yml/badge.svg)](https://github.com/XENON-github/recon/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/XENON-github/recon/actions/workflows/codeql.yml/badge.svg)](https://github.com/XENON-github/recon/actions/workflows/codeql.yml)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
 
 A fast, safe-by-default TCP/UDP port, service and OS scanner in modern C++: an `epoll` reactor, a raw-socket SYN scanner,
 strict bounds-checked protocol parsers, honest confidence-scored output, and CI-friendly drift detection.
+
+**Contents:** [Install](#install) · [Quickstart](#quickstart) · [How it works](#how-it-works) · [Features](#features) · [Security and quality](#security-and-quality) · [Documentation](#documentation) · [Known gaps](#known-gaps) · [Roadmap](#roadmap)
 
 > **Authorization.** Only scan systems you own or have explicit written permission to test. Defaults are conservative
 > (500 probes/s, 128 sockets in flight) and a notice is printed on every run.
 
 ## Install
 
-Linux only. Pick whichever is easiest; **none of them needs `sudo` unless you ask for a system-wide install.**
+```bash
+git clone https://github.com/XENON-github/recon.git && cd recon
+```
+
+Linux only. Pick whichever is easiest. The default install is per-user (`~/.local`) and needs no `sudo`; only the system-wide options do.
 
 | Method | Command | Needs |
 |---|---|---|
@@ -21,7 +27,7 @@ Linux only. Pick whichever is easiest; **none of them needs `sudo` unless you as
 | Script + missing dependencies | `./scripts/install.sh --install-deps` | asks before using `sudo` for your distro's package manager |
 | CMake | `cmake -S . -B build && cmake --build build -j && sudo cmake --install build` | CMake >= 3.16 |
 | Docker | `docker build -t recon . && docker run --rm --network host recon <target> -pCT` | Docker |
-| Release package | download the `.tar.gz` / `.deb` from the Releases page (checksums and build provenance included) | |
+| Release package | once a release is published: download the `.tar.gz` / `.deb` from the [Releases page](https://github.com/XENON-github/recon/releases) (checksums and build provenance included) | `dpkg`/`tar` |
 
 The script installs to `~/.local` for normal users (`/usr/local` as root), runs `recon --version` to verify, warns if the
 directory is not on your `PATH`, and installs the man page, manual and shell completions. Useful flags:
@@ -35,9 +41,9 @@ Uninstall removes only the files it installed.
 recon localhost -pCT                              # common TCP ports + service/version detection
 recon 192.168.1.0/24 -pCT --dry-run               # preview: how many hosts and probes, time estimate; sends nothing
 recon 192.168.1.0/24 -p 22,80,443 --rate 200     # a subnet, capped rate
-recon host -A                                     # + OS inference
-recon host --profile stealth                      # slow and quiet (20 probes/s, 8 sockets)
-sudo recon host -sS -pAT                          # half-open SYN scan of all ports (or: setcap cap_net_raw+ep)
+recon app.example.lan -A                          # + OS inference
+recon app.example.lan --profile stealth           # slow and quiet (20 probes/s, 8 sockets)
+sudo recon app.example.lan -sS -pAT               # half-open SYN scan of all ports (or: setcap cap_net_raw+ep)
 ```
 
 **In CI**: fail the pipeline when something new opens:
@@ -47,10 +53,24 @@ recon prod.example.internal -pCT --json -q -o today.json --baseline last_known_g
 echo $?        # 0 = no change, 5 = NEW open ports (listed under "drift" in the JSON), 130 = interrupted
 ```
 
-`./scripts/drift_cron.sh` wraps this for scheduled monitoring, and `./scripts/cert_expiry.py` warns about expiring TLS certificates.
+`scripts/drift_cron.sh` wraps this for scheduled monitoring (the alert repeats until you acknowledge it), and `scripts/cert_expiry.py` warns about expiring TLS certificates.
 
-**Documentation:** the [User Manual](docs/MANUAL.md) (also `man recon`) covers every option, output format, recipe, tuning rule,
-error message and the exact network traffic recon sends. `recon --help` gives a summary.
+If a service you know is there shows up as `unknown`, it may greet slowly (SSH with reverse-DNS, FTP ident): try `--banner-wait 3000`, or `--intensity 6` for non-standard ports.
+
+## How it works
+
+```mermaid
+flowchart LR
+    A["CLI and options"] --> B["Target resolver"] --> C["Scan orchestrator"]
+    C --> D["epoll reactor<br/>(or SYN scanner)"]
+    D --> E[("Bounded queue")] --> F["Worker pool<br/>probe engine + matchers"]
+    F --> G[("Result store")] --> H["Table / JSON / CSV<br/>+ exit code"]
+    I["Baseline and drift"] -.-> H
+```
+
+One reactor thread owns all scan sockets; open ports flow through a bounded queue to a worker pool that identifies the service. Each
+service gets a confidence score and a `reported`/`inferred` version quality, and everything a remote host sends is treated as hostile.
+The full map (stages, components, files, and the TCP, SYN and UDP flows) is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Features
 
@@ -58,11 +78,11 @@ error message and the exact network traffic recon sends. `recon --help` gives a 
 |---|---|
 | **Scan engines** | `epoll` connect scan (default) and raw-socket **SYN scan** (`-sS`, IPv4) with sequence-number validation; UDP scan with ICMP-based closed detection |
 | **Safety** | Bounded in-flight sockets, token-bucket rate limit, per-probe deadlines, retries, graceful SIGINT with partial results, adaptive back-off on fd exhaustion, `MSG_NOSIGNAL`, fd-limit clamping, `--dry-run` |
-| **Detection** | Passive banner + active probes (HTTP, TLS, Redis, PostgreSQL, SMB2); SSH/FTP/SMTP/POP3/IMAP/MySQL/VNC/Telnet/DNS/NTP/NetBIOS parsers; `tcpwrapped`; RTT-adaptive timeouts; TLS certificate inspection (OpenSSL) |
+| **Detection** | Passive banner + active probes (HTTP, TLS, Redis, PostgreSQL, SMB2); SSH/FTP/SMTP/POP3/IMAP/MySQL/VNC/Telnet/DNS/NTP/NetBIOS parsers; `tcpwrapped`; RTT-adaptive timeouts and `--banner-wait` for slow greeters; TLS certificate inspection (OpenSSL) |
 | **Honest output** | Every service has a `confidence` (0-100) and a `version_quality` of `reported` or `inferred`. A silent port is `unknown`, never a made-up version |
 | **Targets** | IPv4, IPv6, hostnames, CIDR (with a host cap), `-iL` target files |
 | **Output** | Table (colour on TTY, `NO_COLOR` honoured), strict-UTF-8 JSON, CSV (formula-injection safe), live progress line on stderr; report files are created private (`0600`) |
-| **Automation** | Defined exit codes, `--fail-on-open`, `--baseline` drift detection, scan profiles |
+| **Automation** | Defined exit codes, `--fail-on-open`, `--baseline` drift detection, scan profiles, cron/CI helper scripts |
 
 ### Example output (real run against a local lab with mock services)
 
@@ -117,9 +137,9 @@ Recon treats everything a remote host sends as hostile. See [SECURITY.md](SECURI
 | Parsers | Pure functions over `string_view` with a bounds-checked reader; sanitized, length-capped text; strict JSON with depth and node limits |
 | C++ tests | 109 unit and integration tests (CTest): mock servers on loopback, slow-drip/reset/flood peers, fd-leak and cancellation checks, a differential SYN-vs-connect test, forged-reply injection |
 | End-to-end | 21 tests drive the real binary against Python mock services, including real TLS 1.2/1.3 servers, drift detection, `--dry-run`, the helper scripts, private output files, exit codes and SIGINT handling |
-| Documentation | `tests/doc_test.py` executes every `recon` command line in the manual, requires every `--help` option to be documented in the manual and man page, compares the manual's sample output with the real output, and checks that the architecture map (`docs/architecture.json`) matches the source tree and that `docs/ARCHITECTURE.md` is up to date |
+| Documentation | `tests/doc_test.py` executes every `recon` command line in the manual and this README, requires every `--help` option to be documented in the manual and man page, compares the manual's sample output with the real output, and checks that the architecture map (`docs/architecture.json`) matches the source tree and that `docs/ARCHITECTURE.md` is up to date |
 | Sanitizers | Full suite clean under ASan+UBSan and TSan (GCC 13) |
-| Fuzzing | 3 targets (protocol matchers, JSON/baseline, input parsers); 400k iterations each clean under ASan+UBSan; libFuzzer jobs in CI |
+| Fuzzing | 3 targets (protocol matchers, JSON/baseline, input parsers); 300k iterations each in the final run, clean under ASan+UBSan; libFuzzer jobs in CI |
 | Mutation checks | 19 deliberately re-introduced bugs (SIGPIPE, endianness, ignored retries/cancellation, self-connect, unvalidated SYN-ACKs, symlink-following output, missing JSON limits, ...): each caught by the suite |
 | CI | GCC/Clang x C++17/20, OpenSSL on/off, sanitizers, libFuzzer, clang-format, clang-tidy, CodeQL; tagged releases are built, tested, checksummed and attested |
 
@@ -131,6 +151,18 @@ Recon treats everything a remote host sends as hostile. See [SECURITY.md](SECURI
 * **TCP self-connect**: connecting to `127.0.0.1:P` with `P` in the ephemeral range can connect a socket *to itself*, producing phantom "open" ports in full-range loopback sweeps. Reproduced deterministically and fixed.
 * **Spoofed SYN-ACKs**: the SYN scanner only believes replies that acknowledge its own random sequence number; tested by flooding forged replies at every source port.
 * **Output-file hijacking**: `-o` follows no symlinks and creates `0600` files; tested against a planted symlink.
+
+## Documentation
+
+| Document | What it covers |
+|---|---|
+| [User Manual](docs/MANUAL.md) (also `man recon`) | Every option, output format, recipe, tuning rule, error message, and the exact network traffic recon sends |
+| [Architecture](docs/ARCHITECTURE.md) | Stages, components, flows, threading model and invariants. The diagram is generated from [`architecture.json`](docs/architecture.json) and checked against the source tree |
+| [SECURITY.md](SECURITY.md) | Threat model and private vulnerability reporting |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Building, testing (including sanitizers and fuzzing) and the rules for changes |
+| [CHANGELOG.md](CHANGELOG.md) | What changed in each release |
+
+`recon --help` gives a one-screen summary, and `recon <target> <options> --dry-run` previews any scan without sending a packet.
 
 ## Known gaps
 
@@ -155,7 +187,7 @@ Recon treats everything a remote host sends as hostile. See [SECURITY.md](SECURI
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md): every behaviour change needs a test you have seen fail, parsers treat input as hostile, and docs are tested.
-Please report security issues privately as described in [SECURITY.md](SECURITY.md).
+Please report security issues privately as described in [SECURITY.md](SECURITY.md); other bugs and ideas go to the [issue tracker](https://github.com/XENON-github/recon/issues).
 
 ## License
 
