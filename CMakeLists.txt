@@ -79,7 +79,8 @@ endfunction()
 # ---- library -----------------------------------------------------------------------------
 add_library(recon_core STATIC
   src/net.cpp src/synscan.cpp src/json.cpp src/baseline.cpp src/target.cpp src/scanner.cpp src/matchers.cpp src/detector.cpp
-  src/report.cpp src/osdetect.cpp src/options.cpp src/scan.cpp)
+  src/report.cpp src/osdetect.cpp src/options.cpp src/scan.cpp
+  src/fileio.cpp)
 target_include_directories(recon_core PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
                                        PRIVATE src)
 target_link_libraries(recon_core PUBLIC Threads::Threads)
